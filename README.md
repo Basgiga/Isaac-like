@@ -10,17 +10,25 @@
 - main loop and logic of the game
 - minimap
 - tear shooting
+
+
 *proceduralboxestest.py*
 - fully implemented procedural level generation that avoids stacking rooms (2x2 square of rooms)
 - fully implemented longest path algorithm (for boss room)
 - implemented door mechanism (not closing yet)
 - fully implemented empty room layout
+
+
 *groups.py*
 - Sprites logic and drawing logic
+
+
 *sprites.py*
 - different logic for different entities
 - TEAR (bullet) logic
 - CollisionSprite logic
+
+
 *player.py*
 - movement for player
 - collision detection for player
