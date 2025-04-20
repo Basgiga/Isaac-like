@@ -33,5 +33,10 @@
 - movement for player
 - collision detection for player
 
+*level_editor.py*
+- gemini driven level editor for custom levels with saving
+
+
+
 
 
