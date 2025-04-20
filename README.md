@@ -1,4 +1,4 @@
-# ISAAC LIB (WIP)
+# ISAACLIKE (WIP)
 ## Description
 - Open Source recreation of a well known game "The binding of Isaac" in Pygame!
 - Project is meant to be an enviroment for RL
