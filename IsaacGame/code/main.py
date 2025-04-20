@@ -7,7 +7,9 @@ from settings import *
 from player import Player
 from sprites import *
 from os.path import join, dirname, abspath
-from proceduralboxestest import generate_grid,find_and_set_boss_room ,create_room_surface, unload_room_surface, get_room_from_grid
+from proceduralboxestest import generate_grid, find_and_set_boss_room, create_room_surface, unload_room_surface, get_room_from_grid
+from level_editor import LevelEditor  # Import the LevelEditor
+
 
 class Game:
     def __init__(self, WIDTH, HEIGHT):
@@ -22,13 +24,13 @@ class Game:
 
         # Generate level
         self.grid, self.rooms = generate_grid()
-        find_and_set_boss_room(self.grid,self.rooms)
+        find_and_set_boss_room(self.grid, self.rooms)
         self.current_room = self.rooms[0]
-        create_room_surface(self.current_room, self.floor_image, self.door_image) # Load the starting room
+        create_room_surface(self.current_room, self.floor_image, self.door_image)  # Load the starting room
 
         # Groups
         self.all_sprites = pygame.sprite.Group()
-        self.collision_sprites = self.current_room.collision_sprites # Initial collision sprites
+        self.collision_sprites = self.current_room.collision_sprites  # Initial collision sprites
         self.tear_sprites = pygame.sprite.Group()
 
         # Player setup
@@ -59,6 +61,9 @@ class Game:
         self.room_color = (100, 100, 100)
         self.door_color = (0, 100, 0)
 
+        # Level Editor
+        self.level_editor = LevelEditor(self)  # Pass the Game instance
+
     def load_images(self):
         # Load assets
         base_folder = dirname(dirname(abspath(__file__)))
@@ -66,8 +71,8 @@ class Game:
         door_path = join(base_folder, 'images', 'assets', 'door.png')
 
         # floor img
-        new_width = 1366
-        new_height = 768
+        new_width = 1400
+        new_height = 800
         self.floor_image = pygame.image.load(flooar_path).convert()
         self.floor_image = pygame.transform.scale(self.floor_image, (new_width, new_height))
 
@@ -81,10 +86,9 @@ class Game:
         tear_path = join(base_folder, 'images', 'assets', 'tear.png')
         self.tear_surf = pygame.image.load(tear_path).convert_alpha()
 
-
     def input(self):
         keys = pygame.key.get_pressed()
-        if self.can_shoot:
+        if self.can_shoot and not self.level_editor.editor_active:  # Only shoot if not in editor
             direction = pygame.math.Vector2(0, 0)
             rotation = 0
             offset_x = 0
@@ -119,11 +123,11 @@ class Game:
                 new_height = int(rotated_tear_surf.get_height() * scale_factor)
                 scaled_tear_surf = pygame.transform.scale(rotated_tear_surf, (new_width, new_height))
 
-                Tear(scaled_tear_surf, new_pos, direction, (self.all_sprites, self.tear_sprites), self.collision_sprites)
+                Tear(scaled_tear_surf, new_pos, direction, (self.all_sprites, self.tear_sprites),
+                     self.collision_sprites)
                 print("shoot")
                 self.can_shoot = False
                 self.shoot_time = pygame.time.get_ticks()
-
 
     def tear_timer(self):
         if not self.can_shoot:
@@ -137,21 +141,25 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_TAB:
+                        self.level_editor.toggle_editor()
 
             self.all_sprites.update(dt)
             self.tear_timer()
             self.input()
             self.update(dt)
+            self.level_editor.run(dt)  # Crucial line: Run the editor every frame
             self.draw()
 
         pygame.quit()
 
     def update(self, dt):
-        if not self.transitioning:
+        if not self.transitioning and not self.level_editor.editor_active:
             self.player.update(dt)
             self.update_camera()
             self.check_room_transition()
-        else:
+        elif self.transitioning:
             current_time = pygame.time.get_ticks()
             if current_time - self.transition_timer >= self.transition_duration:
                 self.transitioning = False
@@ -159,14 +167,18 @@ class Game:
                 tear.kill()
             self.can_shoot = True
 
+        #self.level_editor.run(dt)  # Run the level editor every frame #This line was moved to the run function
+
     def update_camera(self):
         # Center the camera on the player
         self.camera_offset.x = self.player.rect.centerx - WIDTH // 2
         self.camera_offset.y = self.player.rect.centery - HEIGHT // 2
 
         # Clamp camera to room bounds
-        self.camera_offset.x = max(self.current_room.world_x, min(self.camera_offset.x, self.current_room.world_x + WIDTH - WIDTH))
-        self.camera_offset.y = max(self.current_room.world_y, min(self.camera_offset.y, self.current_room.world_y + HEIGHT - HEIGHT))
+        self.camera_offset.x = max(self.current_room.world_x,
+                                   min(self.camera_offset.x, self.current_room.world_x + WIDTH - WIDTH))
+        self.camera_offset.y = max(self.current_room.world_y,
+                                   min(self.camera_offset.y, self.current_room.world_y + HEIGHT - HEIGHT))
 
     def check_room_transition(self):
         player_rect = self.player.hitbox_rect  # Use the hitbox
@@ -205,7 +217,7 @@ class Game:
                     create_room_surface(self.current_room, self.floor_image, self.door_image)
                 self.collision_sprites.empty()
                 self.collision_sprites.add(self.current_room.collision_sprites)
-                self.player.collision_sprites = self.collision_sprites # Update player's collision sprites
+                self.player.collision_sprites = self.collision_sprites  # Update player's collision sprites
                 self.load_adjacent_rooms()
 
                 # Adjust player position (example: center of the door)
@@ -248,10 +260,10 @@ class Game:
             # Highlight current room
             if room == self.current_room:
                 pygame.draw.rect(self.screen, self.current_room_color, rect)
-                pygame.draw.rect(self.screen, (0,0,0), rect_border, 1)
+                pygame.draw.rect(self.screen, (0, 0, 0), rect_border, 1)
             else:
-                pygame.draw.rect(self.screen, self.room_color, rect, 0) # Filled rectangle
-                pygame.draw.rect(self.screen, (0,0,0), rect_border, 1)
+                pygame.draw.rect(self.screen, self.room_color, rect, 0)  # Filled rectangle
+                pygame.draw.rect(self.screen, (0, 0, 0), rect_border, 1)
             # Draw doors
             door_size = self.room_size_on_minimap // 3
             door_offset = self.room_size_on_minimap // 3
@@ -271,22 +283,33 @@ class Game:
                 self.screen.blit(s_text, text_rect)
 
             if room.door_left:
-                pygame.draw.rect(self.screen, self.door_color, (rect_x, rect_y + door_offset, door_size // 2, door_size))
+                pygame.draw.rect(self.screen, self.door_color,
+                             (rect_x, rect_y + door_offset, door_size // 2, door_size))
             if room.door_right:
-                pygame.draw.rect(self.screen, self.door_color, (rect_x + self.room_size_on_minimap - door_size // 2, rect_y + door_offset, door_size // 2, door_size))
+                pygame.draw.rect(self.screen, self.door_color,
+                             (rect_x + self.room_size_on_minimap - door_size // 2, rect_y + door_offset,
+                              door_size // 2, door_size))
             if room.door_up:
-                pygame.draw.rect(self.screen, self.door_color, (rect_x + door_offset, rect_y, door_size, door_size // 2))
+                pygame.draw.rect(self.screen, self.door_color,
+                             (rect_x + door_offset, rect_y, door_size, door_size // 2))
             if room.door_down:
-                pygame.draw.rect(self.screen, self.door_color, (rect_x + door_offset, rect_y + self.room_size_on_minimap - door_size // 2, door_size, door_size // 2))
+                pygame.draw.rect(self.screen, self.door_color,
+                             (rect_x + door_offset, rect_y + self.room_size_on_minimap - door_size // 2,
+                              door_size, door_size // 2))
 
     def draw(self):
-        self.screen.fill((0, 0, 0, 0))
-        self.current_room.draw(self.screen, self.camera_offset)
-        for sprite in self.all_sprites:
-            self.screen.blit(sprite.image, sprite.rect.topleft - self.camera_offset)
-        self.all_sprites.draw(self.screen)
-        self.draw_minimap()
+        if not self.level_editor.editor_active:  # Only draw game elements if editor is inactive
+            self.screen.fill((0, 0, 0, 0))
+            self.current_room.draw(self.screen, self.camera_offset)
+            for sprite in self.all_sprites:
+                self.screen.blit(sprite.image, sprite.rect.topleft - self.camera_offset)
+            self.all_sprites.draw(self.screen)
+            self.draw_minimap()
+        #else:
+        # self.screen.fill((0, 0, 0, 0))  # Clear the screen to black in editor mode
+        self.level_editor.run(0)  # Run the level editor every frame
         pygame.display.update()
+
 
 if __name__ == '__main__':
     game = Game(WIDTH, HEIGHT)
