@@ -12,7 +12,7 @@ def nwd(a, b):
 WIDTH = 1400
 HEIGHT = 800
 FPS = 60
-TILE_SIZE = int(nwd(WIDTH,HEIGHT)//3.5)
+TILE_SIZE = int(nwd(WIDTH,HEIGHT)//3)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)

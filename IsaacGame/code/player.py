@@ -8,12 +8,12 @@ class Player(pygame.sprite.Sprite):
         base_folder = dirname(dirname(abspath(__file__)))
         image_path = join(base_folder, 'images', 'player', 'isaac_sprite.png')
         self.original_image = pygame.image.load(image_path).convert_alpha()
-        new_width = 512/6
-        new_height = 603/6
+        new_width = 512/7
+        new_height = 603/7
         self.image = pygame.transform.scale(self.original_image, (new_width, new_height))
         self.rect = self.image.get_rect(center=pos)
         self.image.set_colorkey((0, 0, 0))
-        self.hitbox_rect = self.rect.inflate(-20,-10)
+        self.hitbox_rect = self.rect.inflate(-20,-30)
 
         # movement
         self.direction = pygame.Vector2() # no inputs = no movement

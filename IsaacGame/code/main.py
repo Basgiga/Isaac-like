@@ -144,7 +144,7 @@ class Game:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_TAB:
                         self.level_editor.toggle_editor()
-
+                self.level_editor.handle_editor_event(event)
             self.all_sprites.update(dt)
             self.tear_timer()
             self.input()
