@@ -1,3 +1,4 @@
+# main.py
 import pygame
 import sys
 import random
@@ -32,6 +33,7 @@ class Game:
         self.all_sprites = pygame.sprite.Group()
         self.collision_sprites = self.current_room.collision_sprites  # Initial collision sprites
         self.tear_sprites = pygame.sprite.Group()
+        self.enemy_sprites = pygame.sprite.Group() # <<< --- Line from previous fix --- >>>
 
         # Player setup
         self.player = Player((WIDTH // 2, HEIGHT // 2), self.all_sprites, self.collision_sprites)
@@ -40,7 +42,7 @@ class Game:
         # Tear timer
         self.can_shoot = True
         self.shoot_time = 0
-        self.tear_cooldown = 1000
+        self.tear_cooldown = 700
 
         # Camera setup
         self.camera_offset = pygame.math.Vector2(0, 0)
@@ -67,7 +69,7 @@ class Game:
     def load_images(self):
         # Load assets
         base_folder = dirname(dirname(abspath(__file__)))
-        flooar_path = join(base_folder, 'images', 'assets', 'floor.png')
+        flooar_path = join(base_folder, 'images', 'assets', 'floor.png') # Note: 'flooar' typo is kept from original file
         door_path = join(base_folder, 'images', 'assets', 'door.png')
 
         # floor img
@@ -88,7 +90,8 @@ class Game:
 
     def input(self):
         keys = pygame.key.get_pressed()
-        if self.can_shoot and not self.level_editor.editor_active:  # Only shoot if not in editor
+        # --- Player input for shooting is already prevented if editor active ---
+        if self.can_shoot and not self.level_editor.editor_active:
             direction = pygame.math.Vector2(0, 0)
             rotation = 0
             offset_x = 0
@@ -123,14 +126,16 @@ class Game:
                 new_height = int(rotated_tear_surf.get_height() * scale_factor)
                 scaled_tear_surf = pygame.transform.scale(rotated_tear_surf, (new_width, new_height))
 
+                # <<< --- Line from previous fix --- >>>
                 Tear(scaled_tear_surf, new_pos, direction, (self.all_sprites, self.tear_sprites),
-                     self.collision_sprites)
+                     self.collision_sprites, self.enemy_sprites)
                 print("shoot")
                 self.can_shoot = False
                 self.shoot_time = pygame.time.get_ticks()
 
     def tear_timer(self):
-        if not self.can_shoot:
+         # --- Only update tear timer if editor inactive ---
+        if not self.can_shoot and not self.level_editor.editor_active:
             current_time = pygame.time.get_ticks()
             if current_time - self.shoot_time >= self.tear_cooldown:
                 self.can_shoot = True
@@ -144,46 +149,62 @@ class Game:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_TAB:
                         self.level_editor.toggle_editor()
+                # Pass all events to editor (it checks internally if active)
                 self.level_editor.handle_editor_event(event)
-            self.all_sprites.update(dt)
-            self.tear_timer()
-            self.input()
-            self.update(dt)
-            self.level_editor.run(dt)  # Crucial line: Run the editor every frame
+
+            # --- Game Logic Updates only if editor is NOT active ---
+            if not self.level_editor.editor_active:
+                self.all_sprites.update(dt) # Update player, enemies, tears etc.
+                self.tear_timer()           # Update tear cooldown
+                self.input()                # Handle shooting input
+                self.update(dt)             # Handle transitions, camera updates etc.
+            # ---------------------------------------------------------
+
+            # --- Drawing happens regardless of editor state ---
+            # Editor drawing (grid/UI) will happen inside self.draw()
+            # if self.level_editor.run is called there
             self.draw()
+            # --------------------------------------------------
 
         pygame.quit()
 
     def update(self, dt):
-        if not self.transitioning and not self.level_editor.editor_active:
-            self.player.update(dt)
+         # --- This method only runs if editor is NOT active (called from run loop) ---
+        if not self.transitioning: # and not self.level_editor.editor_active: # Inner check is redundant now
+            # Player update is already handled by self.all_sprites.update(dt) above
+            # self.player.update(dt) # Can likely remove this if player update is standard
             self.update_camera()
             self.check_room_transition()
         elif self.transitioning:
             current_time = pygame.time.get_ticks()
             if current_time - self.transition_timer >= self.transition_duration:
                 self.transitioning = False
+            # Clearing tears during transition might still be desired
             for tear in self.tear_sprites:
                 tear.kill()
             self.can_shoot = True
-
-        #self.level_editor.run(dt)  # Run the level editor every frame #This line was moved to the run function
+        # -------------------------------------------------------------------------
 
     def update_camera(self):
         # Center the camera on the player
         self.camera_offset.x = self.player.rect.centerx - WIDTH // 2
         self.camera_offset.y = self.player.rect.centery - HEIGHT // 2
 
-        # Clamp camera to room bounds
-        self.camera_offset.x = max(self.current_room.world_x,
-                                   min(self.camera_offset.x, self.current_room.world_x + WIDTH - WIDTH))
-        self.camera_offset.y = max(self.current_room.world_y,
-                                   min(self.camera_offset.y, self.current_room.world_y + HEIGHT - HEIGHT))
+        # Clamp camera to room bounds (Check if room has world_x/y before clamping)
+        if hasattr(self.current_room, 'world_x') and hasattr(self.current_room, 'world_y'):
+            self.camera_offset.x = max(self.current_room.world_x,
+                                    min(self.camera_offset.x, self.current_room.world_x + WIDTH - WIDTH)) # Clamping logic seems off, maybe should be room width/height?
+            self.camera_offset.y = max(self.current_room.world_y,
+                                    min(self.camera_offset.y, self.current_room.world_y + HEIGHT - HEIGHT)) # Assuming room fills screen for now
+        # Keeping original clamping logic for now per constraints
 
     def check_room_transition(self):
+        # --- This only runs if editor is NOT active ---
+        if not self.current_room.rect: return # Need room rect for transitions
+
         player_rect = self.player.hitbox_rect  # Use the hitbox
         room_rect = self.current_room.rect
-        door_threshold = 10  # Adjust this value as needed
+        door_threshold = 10
         door_threshold_lr = 15
         if player_rect.left < room_rect.left + door_threshold_lr and self.current_room.door_left:
             self.change_room(-1, 0)
@@ -193,8 +214,10 @@ class Game:
             self.change_room(0, -1)
         elif player_rect.bottom > room_rect.bottom - door_threshold and self.current_room.door_down:
             self.change_room(0, 1)
+        # ------------------------------------------------
 
     def change_room(self, dx, dy):
+        # --- This only runs if editor is NOT active ---
         if not self.transitioning:
             self.transitioning = True
             self.transition_timer = pygame.time.get_ticks()
@@ -206,10 +229,14 @@ class Game:
 
             new_room = get_room_from_grid(self.rooms, new_grid_x, new_grid_y)
             if new_room:
-                # Unload old rooms (optional, depending on memory management)
-                # self.unload_adjacent_rooms()
+                # --- Clear enemies/objects from old room before changing ---
+                # (This part needs enemy_sprites group from previous fix)
+                if hasattr(self, 'enemy_sprites'):
+                    for enemy in self.enemy_sprites: enemy.kill()
+                # Clear tears regardless
+                for tear in self.tear_sprites: tear.kill()
+                # ---------------------------------------------------------
 
-                # Load new room and adjacent rooms
                 self.current_room = new_room
                 if not self.current_room.loaded:
                     create_room_surface(self.current_room, self.floor_image, self.door_image)
@@ -217,22 +244,17 @@ class Game:
                     create_room_surface(self.current_room, self.floor_image, self.door_image)
                 self.collision_sprites.empty()
                 self.collision_sprites.add(self.current_room.collision_sprites)
-                self.player.collision_sprites = self.collision_sprites  # Update player's collision sprites
+                self.player.collision_sprites = self.collision_sprites
                 self.load_adjacent_rooms()
 
-                # Adjust player position (example: center of the door)
-                if dx > 0:
-                    self.player.rect.left = self.current_room.rect.left + 50
-                elif dx < 0:
-                    self.player.rect.right = self.current_room.rect.right - 50
-                elif dy > 0:
-                    self.player.rect.top = self.current_room.rect.top + 50
-                elif dy < 0:
-                    self.player.rect.bottom = self.current_room.rect.bottom - 50
+                if dx > 0: self.player.rect.left = self.current_room.rect.left + 50
+                elif dx < 0: self.player.rect.right = self.current_room.rect.right - 50
+                elif dy > 0: self.player.rect.top = self.current_room.rect.top + 50
+                elif dy < 0: self.player.rect.bottom = self.current_room.rect.bottom - 50
 
-                # Update hitbox_rect to match
                 self.player.hitbox_rect.center = self.player.rect.center
                 self.update_camera()
+        # ------------------------------------------------
 
     def load_adjacent_rooms(self):
         for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
@@ -251,23 +273,22 @@ class Game:
                 unload_room_surface(adjacent_room)
 
     def draw_minimap(self):
+        # --- Minimap drawing already happens only if editor inactive via draw() ---
         for room in self.rooms:
             rect_x = self.minimap_x + room.grid_x * self.room_size_on_minimap
             rect_y = self.minimap_y + room.grid_y * self.room_size_on_minimap
             rect = pygame.Rect(rect_x, rect_y, self.room_size_on_minimap, self.room_size_on_minimap)
             rect_border = pygame.Rect(rect_x, rect_y, self.room_size_on_minimap, self.room_size_on_minimap)
 
-            # Highlight current room
             if room == self.current_room:
                 pygame.draw.rect(self.screen, self.current_room_color, rect)
                 pygame.draw.rect(self.screen, (0, 0, 0), rect_border, 1)
             else:
-                pygame.draw.rect(self.screen, self.room_color, rect, 0)  # Filled rectangle
+                pygame.draw.rect(self.screen, self.room_color, rect, 0)
                 pygame.draw.rect(self.screen, (0, 0, 0), rect_border, 1)
-            # Draw doors
+
             door_size = self.room_size_on_minimap // 3
             door_offset = self.room_size_on_minimap // 3
-
             font_size = self.room_size_on_minimap
             font = pygame.font.Font(None, font_size)
             s_color = (255, 100, 0)
@@ -282,32 +303,41 @@ class Game:
                 text_rect = s_text.get_rect(center=rect.center)
                 self.screen.blit(s_text, text_rect)
 
-            if room.door_left:
-                pygame.draw.rect(self.screen, self.door_color,
-                             (rect_x, rect_y + door_offset, door_size // 2, door_size))
-            if room.door_right:
-                pygame.draw.rect(self.screen, self.door_color,
-                             (rect_x + self.room_size_on_minimap - door_size // 2, rect_y + door_offset,
-                              door_size // 2, door_size))
-            if room.door_up:
-                pygame.draw.rect(self.screen, self.door_color,
-                             (rect_x + door_offset, rect_y, door_size, door_size // 2))
-            if room.door_down:
-                pygame.draw.rect(self.screen, self.door_color,
-                             (rect_x + door_offset, rect_y + self.room_size_on_minimap - door_size // 2,
-                              door_size, door_size // 2))
+            if room.door_left: pygame.draw.rect(self.screen, self.door_color, (rect_x, rect_y + door_offset, door_size // 2, door_size))
+            if room.door_right: pygame.draw.rect(self.screen, self.door_color, (rect_x + self.room_size_on_minimap - door_size // 2, rect_y + door_offset, door_size // 2, door_size))
+            if room.door_up: pygame.draw.rect(self.screen, self.door_color, (rect_x + door_offset, rect_y, door_size, door_size // 2))
+            if room.door_down: pygame.draw.rect(self.screen, self.door_color, (rect_x + door_offset, rect_y + self.room_size_on_minimap - door_size // 2, door_size, door_size // 2))
+        # --------------------------------------------------------------------------
 
     def draw(self):
-        if not self.level_editor.editor_active:  # Only draw game elements if editor is inactive
-            self.screen.fill((0, 0, 0, 0))
-            self.current_room.draw(self.screen, self.camera_offset)
-            for sprite in self.all_sprites:
-                self.screen.blit(sprite.image, sprite.rect.topleft - self.camera_offset)
-            self.all_sprites.draw(self.screen)
-            self.draw_minimap()
-        #else:
-        # self.screen.fill((0, 0, 0, 0))  # Clear the screen to black in editor mode
-        self.level_editor.run(0)  # Run the level editor every frame
+        # --- FIX: Draw game world elements ALWAYS ---
+        self.screen.fill((0, 0, 0, 0)) # Keep background clear/fill as original
+        self.current_room.draw(self.screen, self.camera_offset)
+        # --- Draw sprites respecting camera offset ---
+        for sprite in self.all_sprites:
+            # Handle health bar drawing if applicable (from previous changes)
+            if isinstance(sprite, (Enemy_Greed, Spider)) and hasattr(sprite, 'draw_health_bar'):
+                 # Need offset for health bar drawing relative to screen
+                 sprite.draw_health_bar(self.screen, self.camera_offset)
+                 # Draw sprite image after health bar maybe? Or before? Draw after for now.
+                 self.screen.blit(sprite.image, sprite.rect.topleft - self.camera_offset)
+            else:
+                 # Normal sprite drawing
+                 self.screen.blit(sprite.image, sprite.rect.topleft - self.camera_offset)
+
+        # self.all_sprites.draw(self.screen) # This call likely draws without offset, remove if manually drawing above
+        # --------------------------------------------
+
+        # --- Draw minimap ALWAYS (unless editor specifically hides it) ---
+        self.draw_minimap()
+        # ---------------------------------------------------------------
+
+        # --- Draw Level Editor elements (grid, UI) if active ---
+        # This call draws *on top* of the game world elements drawn above
+        # The level_editor.run method itself checks if editor is active
+        self.level_editor.run(0) # dt doesn't matter for drawing
+        # ---------------------------------------------------------
+
         pygame.display.update()
 
 
