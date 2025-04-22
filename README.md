@@ -27,6 +27,10 @@
 - different logic for different entities
 - TEAR (bullet) logic
 - CollisionSprite logic
+- Rock logic TOFIX: rocks sprites tend to preserve through rooms, but without collisionboxes
+- Enemy_greed logic (basic enemy)
+- Spider logic (basic spider)
+- TOADD: coin logic
 
 
 *player.py*
@@ -35,7 +39,7 @@
 
 *level_editor.py*
 - gemini driven level editor for custom levels with saving
-
+- avaible to add enemies from sprites.py
 
 
 
