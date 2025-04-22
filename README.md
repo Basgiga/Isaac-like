@@ -15,7 +15,7 @@
 *proceduralboxestest.py*
 - fully implemented procedural level generation that avoids stacking rooms (2x2 square of rooms)
 - fully implemented longest path algorithm (for boss room)
-- implemented door mechanism (not closing yet)
+- implemented door mechanism  TOADD: closing the doors while enemies in the room / button not clicked (with visual animation)
 - fully implemented empty room layout
 
 
@@ -40,6 +40,7 @@
 *level_editor.py*
 - gemini driven level editor for custom levels with saving
 - avaible to add enemies from sprites.py
+- TOFIX: sometimes editor allows for placing mutliple objects at one location
 
 
 
